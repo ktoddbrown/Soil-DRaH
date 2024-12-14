@@ -1,0 +1,267 @@
+---
+title: "How-to Annotations"
+editor: visual
+format:
+  html:
+    page-layout: full
+    df-print: kable
+---
+
+## Purpose
+
+#### *What are annotations and why are they important?*
+
+Annotations, or metadata, refers to information about the data. This can include long names or descriptions of columns, units associated with those columns, control vocabularies, or methods. Sometimes this also includes context that is applicable to the entire dataset that would be known within the original publication but might be lost when moving the data out of that context. Sample time, location or soil type are examples of data that is often in methods sections or introductions of a report or publication rather then inside a data table, that may be lost when that data is integrated into a larger collection.
+
+## Annotations Tuple Structure
+
+#### *What does the data annotations tuple structure look like?*
+
+While there are many forms that an annotation can take we have settled on a 4 part tuple: (`id`, `of_variable`, `is_type`, `with_entry`) An id are the column identifiers and often consists of a `table_id` and a `column_id`. The `table_id` is generally the base name of the csv/tsv file that is associated with the `column_id`, which is an exact match for the names of the columns in the associated tables. All `column_id` must be associated with a `table_id` but information may be associated with a `table_id` and not a specific column (i.e., you have metadata that applies to the whole or groups of the data set and not just a specific column).
+
+Entries in the `of_variable` column describe the variables that is associated with the `id`. These are generally observable properties like bulk density, organic carbon, ecotype, or soil color. Often these represent how the researcher sees their data, for example do they distinguish between organic carbon fraction and carbon fraction. In creating these annotations you should strive to reflect the original purpose or intent of the data providers as much as possible. In context to the highly data set dependent `of_variable` entries, `is_type` should have a more restricted set of entries.
+
+The `is_type` entry commonly falls into one of the following {`value`, `definition`, `unit`, `method`, `control_vocabulary`}. This describes the kind of information associated with `of_variable` that is found in the `with_entry`. Note that we have chosen not to distinguish between numerical or text values, and instead just use the term 'value' for simplicity. Currently `control_vocabularies` are key-definition pairs where `|` separate the key and definition and `;` separate the different keys.
+
+The `with_entry` column is either the entry associated with the variable and type described above or a special notation that indicates you should refer to the data set being described. We currently use `--` for data set reference.
+
+## Annotations Outline
+
+#### *At a high-level, what is the data annotations generation process?*
+
+Gathering the information to create an annotation requires reading the contextual information provided with the data. This can include reading associated publications or reports, reviewing metadata on archives, or talking with a point of contact familiar with the data. Documentation resources will generally fall into structured machine readable formats (i.e., EML metadata on an archive), unstructured machine readable (i.e., text tables or structured lists in pdf documents), and human driven (i.e., paragraph embedded information or correspondence with other researchers). While it is possible to create an annotation entirely by hand, often times text processing scripts can help reduce errors when working with machine readable text. If you do use text processing, documenting that text processing at the end of a integration report is good practice to ensure transparency. In all cases, running checks on your data annotation structure (described below) will reduce frustrations down the line.
+
+Generally you are looking to identify human readable descriptions of what the columns names refer to, associated units or methods, location, collection time information, and control vocabulary.
+
+As a final step annotations should be checked for completeness. Column and table id should be cross referenced with the data set itself to ensure that all columns are described as desired (for large data sets, a partial annotation of only desired may be appropriate). Variables and types should be checked for spelling errors (for example the `unique` function in R can be used to check for spelling variations).
+
+Finally reviewing the annotations table with an expert in the data set or second reviewer is recommended at this stage.
+
+## Annotations of Data Annotations
+
+#### *What does a complete annotations table look like?*
+
+To give an example of what a finished annotations looks like, consider the annotation table below which encapsulates important context behind the annotations themselves as described in the `Annotations Tuple Structure` section.
+
+| `table_id`     | `column_id` | `of_variable` | `is_type`          | `with_entry`                                                                                                                                                                                                           |
+|--------------|--------------|--------------|--------------|-------------------|
+| annotations_df | column_id   | column_header | identifier         | --                                                                                                                                                                                                                     |
+| annotations_df | column_id   | column_header | description        | The column name or header or identifier that links to the table being annotated.                                                                                                                                       |
+| annotations_df | of_variable | variable      | value              | --                                                                                                                                                                                                                     |
+| annotations_df | of_variable | variable      | description        | The property or variable that the information in this column is associated with.                                                                                                                                       |
+| annotations_df | is_type     | type          | value              | --                                                                                                                                                                                                                     |
+| annotations_df | is_type     | type          | description        | The dimension or type of information associated with a specific variable and column                                                                                                                                    |
+| annotations_df | is_type     | type          | control_vocabulary | 'value\|the observation or measurement; definition\|a human readable definition of the variable; unit\|unit of measure for the observation; control_vocabulary\|paired term definitions used to describe the variable' |
+| annotations_df | with_entry  | entry         | value              | --                                                                                                                                                                                                                     |
+| annotations_df | with_entry  | entry         | description        | the entry associated with the id-variable-type tuple or a '--' to denote reference to the data table being annotated                                                                                                   |
+
+Notice how the `column_id` and `of_varaible` entries (originally variables) are not all unique. The entires column_id, of_variable, and with_entry appear twice while is_type appears three times – that is intentional and how your annotations table should turn out if structured properly. In general, the number of entries for any given variable in your data annotations table is equal to the number of is_type-with_entry pairs you need. This table could be saved as a CSV file (or other delimited file type) for future use in a read function which are explained in another part of the Wiki.
+
+## Simple Example
+
+#### *What does the process look like from start to finish on an example?*
+
+To begin, load in the following libraries to be able to successfully run the R code.
+
+```{r message = FALSE, warning = FALSE}
+
+# Used to make the data frames display in an organzied manner
+library(knitr)
+library(kableExtra)
+# Used to modify the data frame in a streamlined fashion
+library(dplyr)
+# Used to parse strings
+library(stringr)
+```
+
+### The Data Set
+
+Your data set may be stored as a CSV file, a Excel spreadsheet, or in some other form. Regardless you must be able to read it into a R script for processing. You can use the `read_csv` function (from the readr library) or the `read_excel` function (from the readxl library) to read in such aforementioned files.
+
+For this example, let's say you read in the following data from a file called Salary Survey.csv of a survey given to 10 people asking basic information about them.
+
+```{r, Creating Data Table}
+#| code-fold: true
+#| code-summary: "Show code"
+
+# Randomly generated data for the example that follows
+names <- c("Name of participant", "Alice", "Bob", "Charlie", "Mary", "Sam", "Jack", "Sue", "Tom", "Jon", "Harry")
+participant_id = c("Uniquie identifer for a participant", 12, 42, 15, 78, 32, 22, 90, 65, 15, 10)
+ages <- c("Age of participant", 25, 30, 35, 45, 46, 71, 28, 67, 45, 50)
+salary <- c("Annual salary of participant (Thousands of US dollars)", 90, 85, 88, 66, 59, 103, 77, 54, 31, 55)
+state <- c("State participant currently lives in: FL = Florida, AZ = Arizona, CA = Califorina, NY = New York, WY = Wyoming, NM = New Mexico, KY = Kentucky", "FL", "AZ", "CA", "NY", "WY", "FL", "FL", "NY", "NM", "KY")
+
+survey_df <- data.frame(Name = names, Participant_ID = participant_id, Age = ages, Salary = salary, State = state)
+survey_note = "This data was randomly generated in 2024"
+file_name = "Salary Survey"
+
+# Function we'll use to display the any df; going forward, this will not be shown 
+display_df <- function(df){
+  knitr::kable(df) %>%
+    kable_styling("striped")
+}
+
+display_df(survey_df)
+```
+
+The metadata is in the first row of every column. It gives context as to what each variable (Name, Age, State, etc.) means. The data is in the remaining rows. If, as we analyze this data set, we do not take into account the context provided by the metadata, the data itself could be misunderstood or futile. Is the salary that's reported weekly and in hundreds of dollars – or is it yearly and in thousands of dollars? What is this seemingly random number assigned to each participant used for? Fortunately, these type of questions are answered by the metadata – making any future analysis of the data useful and appropriate. And so, it is important that we parse then transform it into the appropriate tuple structure and store it.
+
+### Reading In Metadata for Use
+
+Data sets come in varying formats – with some being easier than others to acquire information from. And while there are too many formats to count, we will work with the one above as it is fairly common. Regardless of the data set format, the end goal of getting the metadata into the tuple structure is the always same.
+
+First, we start our annotations df by getting all of the variables from the original data set and putting them under the column_id column. Note: there will be only one instance of each variable for right now; we will take into account multiple instances for each is_type-with_entry pair later.
+
+```{r}
+
+annotations <- data.frame(colnames(survey_df))
+names(annotations)[1] <- "column_id"
+```
+
+```{r echo = FALSE}
+
+display_df(annotations)
+```
+
+We will go ahead and add the `table_id` and `of_variable` column. We will worry about the order of the columns after every column has been added.
+
+```{r}
+
+annotations <- annotations %>% 
+  mutate(
+    # Setting the table_id column entires to the file name that stored the data table
+    table_id = file_name,
+    
+    # Mapping variables to the appropriate of_variable entry
+    of_variable = case_when(
+      column_id %in% c("Name") ~ "Person_Name",
+      column_id %in% c("Participant_ID") ~ "Unique_ID",
+      column_id %in% c("Age") ~ "Person_Age",
+      column_id %in% c("Salary") ~ "Annual_Salary",
+      column_id %in% c("State") ~ "State_Located",
+    )
+  )
+```
+
+```{r echo = FALSE}
+
+display_df(annotations)
+```
+
+### Getting is_type-with_entry Pairs
+
+Next, we'll aim to add the is_type-with_entry pairs. At first, they will be appended in a differenet structure than that of the tuple format; we'll fixed that later.
+
+```{r}
+
+# Parse the metadata about the State and Salary variables into their appropriate is_type type.
+state_cv = str_extract(survey_df[1, which(colnames(survey_df) == "State")], stringr::regex("(?<=: ).*")) %>%
+  # FIXME:`|` appears as &#124; when kable table is rendered and shown.
+  str_replace_all(" = ", "|") %>%
+  str_replace_all(",", ";")
+
+state_desc = str_extract(survey_df[1, which(colnames(survey_df) == "State")], stringr::regex(".*(?=:)"))
+
+salary_unit = str_extract(survey_df[1, which(colnames(survey_df) == "Salary")], stringr::regex("(?<=\\().*?(?=\\))"))
+
+salary_desc = str_extract(survey_df[1, which(colnames(survey_df) == "Salary")], stringr::regex(".*(?=\\()"))
+
+# Update the annotations df to include all is_type-with_entry pairs
+annotations <- annotations %>% 
+  mutate(
+    value = "--",
+    identifier = "--",
+    description = c(survey_df[1,]),
+    
+    description = case_when(
+      column_id %in% c("State") ~ state_desc,
+      column_id %in% c("Salary") ~ salary_desc,
+      TRUE ~ as.character(description)
+    ),
+  
+    control_vocabulary = case_when(
+      column_id %in% c("State") ~ state_cv,
+      TRUE ~ NA
+    ),
+    
+    unit = case_when(
+      column_id %in% c("Salary") ~ salary_unit,
+      TRUE ~ NA
+    )
+  )
+```
+
+```{r echo = FALSE}
+
+display_df(annotations)
+```
+
+We will now correct the order of the columns and then pivot the annotations df into the correct tuple format.
+
+```{r}
+
+annotations <- annotations %>% 
+  # Get the columns in the correct order
+  select(table_id, column_id, of_variable, value, description, unit, control_vocabulary, identifier) %>% 
+  # Pivot the annotations df into the correct format for the tuples and drop any rows with NA values
+  tidyr::pivot_longer(c("value", "description", "unit", "control_vocabulary", "identifier"), names_to = "is_type", values_to = "with_entry", values_drop_na=TRUE)
+```
+
+```{r echo = FALSE}
+
+display_df(annotations)
+```
+
+Notice how we now have the same entries for column_id/of_variable repeating the number of is_type-with_entry pairs times. We almost have a complete annotations df.
+
+### Finishing Touches
+
+Before we can save this data annotation df to a CSV file we must add table-wide descriptions, that is information that applies to the whole annotations df and not just a particular variable. In this example, we have a table note.
+
+```{r}
+
+# column_id and of_variable are set to NA for table-wide descriptions
+annotations <- annotations %>% add_row(table_id=file_name, column_id=NA, of_variable=NA, is_type="note", with_entry=survey_note, .before=1)
+```
+
+```{r echo = FALSE}
+
+display_df(annotations)
+```
+
+We will now save this annotation df for future use (in the read functions which are, as mentioned before, explained in another part of the Wiki).
+
+```{r eval = FALSE}
+
+write.csv(annotations, "Salary Survey Annotations.csv", quote=FALSE, row.names=FALSE)
+```
+
+## Larger Data Set Annotations
+
+*What does the data generation process look like on a larger, more realistic data set?*
+
+This data was pulled from the Forest Inventory and Analysis Database (wo-fiadb_user_guide_p2_9-1_final.pdf variable stores the link to the pdf where the data was gathered: <https://research.fs.usda.gov/sites/default/files/2023-11/wo-fiadb_user_guide_p2_9-1_final.pdf>).
+
+Below is the R code which produces the data annotations.
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# File path to where Report_FIA.Rmd is stored on the GitHub; default path is below.
+# Use if Report_FIA.Rmd and this qmd file are not in the same directory anymore.
+# dataDir <- ""
+# file <- file.path(dataDir, "Report_FIA.Rmd")
+
+larger_annotation_ex <- readLines("Report_FIA.Rmd")
+
+# FIXME: Indices are prone to being wrong if lines shift in the Report_FIA.Rmd file.
+chunks <- larger_annotation_ex[394:length(larger_annotation_ex)]
+cat(chunks, sep = "\n")
+```
+
+## Next Steps
+
+*After you generate the data annotations, what's next?*
+
+After you wrote the code that generated the annotations CSV file you must store both the code and annotations file in the appropriate places within the GitHub repository. The code goes into vignettes \> articles \> Report\_{NAME OF YOUR DATA SET}. Toward the end of that file, copy the code into a chuck (or chucks) for documentation purposes. The annotations file must be stored under data \> test. This is the file that will be used later for the read function of the corresponding data set.
+
+For what to do once this entire data annotations process is complete, read the `How-to Read Functions` guide (found in the Wiki) next.
